@@ -1,15 +1,17 @@
 package xavier.com.cognitiveservices.View;
 
 import android.content.Intent;
+import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.View;
@@ -28,9 +30,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener {
+public class
+MainActivity extends AppCompatActivity implements View.OnClickListener {
     private static int REQUEST_IMAGE_CAPTURE = 1;
-
+    private static int SELECT_PHOTO =2;
     private ImageView pictureDisplay;
     private Button analyzePictureButton;
     private TextView displayAnalyze;
@@ -72,6 +75,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
             return true;
+        }else{
+            if( id == R.id.choosePicture){
+                getPicture();
+            }
         }
 
         return super.onOptionsItemSelected(item);
@@ -79,8 +86,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     public void launchAnalyze( ) {
         String result= launchFaceAnalyze ();
-
-
     }
 
     private String launchFaceAnalyze() {
@@ -123,7 +128,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                             displayAnalyze.setText("error");
                         }else{
                             displayAnalyze.setText(result.toString());
-                            bitmap = drawFaceREctangleOnBitmap (bitmap, result);
+                            bitmap = drawFaceRectangleOnBitmap(bitmap, result);
                             pictureDisplay.setImageBitmap(bitmap);
 
                         }
@@ -135,7 +140,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         return null;
     }
 
-    private Bitmap drawFaceREctangleOnBitmap(Bitmap bitmap, Face[] result) {
+    private Bitmap drawFaceRectangleOnBitmap(Bitmap bitmap, Face[] result) {
         Bitmap bitmapDraw = bitmap.copy(Bitmap.Config.ARGB_8888, true);
         Canvas canvas = new Canvas(bitmapDraw);
         Paint paint = new Paint();
@@ -145,6 +150,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         int stokeWidth = 2;
         paint.setStrokeWidth(stokeWidth);
         if (result != null) {
+            textToDisplay = new String();
             for (Face face : result) {
                 FaceRectangle faceRectangle = face.faceRectangle;
                 canvas.drawRect(
@@ -154,8 +160,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         faceRectangle.top + faceRectangle.height,
                         paint);
                 if (face.faceAttributes != null) {
-                    textToDisplay = new String();
-                    textToDisplay = "this is a "+ face.faceAttributes.gender;
+                    textToDisplay += "this is a "+ face.faceAttributes.gender;
                     textToDisplay += " this person is " + face.faceAttributes.age;
                     textToDisplay += " facial hair : "+ face.faceAttributes.facialHair;
                     textToDisplay += " smile : "+face.faceAttributes.smile;
@@ -166,7 +171,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
             }
         }
-        return bitmap;
+        return bitmapDraw;
     }
 
     @Override
@@ -194,9 +199,34 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     protected void onActivityResult (int requestCode, int resultCode, Intent data){
         if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK ){
             Bundle extras = data.getExtras();
-            Bitmap imageBitmap = (Bitmap) extras.get("data");
-            bitmap = imageBitmap;
+            bitmap= (Bitmap) extras.get("data");
             pictureDisplay.setImageBitmap(bitmap);
+        }else{
+            if(requestCode == SELECT_PHOTO && resultCode == RESULT_OK){
+                // Let's read picked image data - its URI
+                Uri pickedImage = data.getData();
+                // Let's read picked image path using content resolver
+                String[] filePath = { MediaStore.Images.Media.DATA };
+                Cursor cursor = getContentResolver().query(pickedImage, filePath, null, null, null);
+                cursor.moveToFirst();
+                String imagePath = cursor.getString(cursor.getColumnIndex(filePath[0]));
+
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                bitmap = BitmapFactory.decodeFile(imagePath, options);
+
+                // Do something with the bitmap
+                pictureDisplay.setImageBitmap(bitmap);
+
+                // At the end remember to close the cursor or you will end with the RuntimeException!
+                cursor.close();
+            }
         }
+    }
+
+    public void getPicture() {
+        Intent photoPickerIntent = new Intent(Intent.ACTION_PICK);
+        photoPickerIntent.setType("image/*");
+        startActivityForResult(photoPickerIntent, SELECT_PHOTO);
     }
 }
