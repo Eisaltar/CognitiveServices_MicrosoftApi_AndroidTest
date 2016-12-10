@@ -13,12 +13,14 @@ import android.os.Bundle;
 import android.provider.MediaStore;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.ListViewCompat;
 import android.support.v7.widget.Toolbar;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -29,6 +31,8 @@ import com.microsoft.projectoxford.face.contract.*;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 public class
 MainActivity extends AppCompatActivity implements View.OnClickListener {
@@ -36,9 +40,9 @@ MainActivity extends AppCompatActivity implements View.OnClickListener {
     private static int SELECT_PHOTO =2;
     private ImageView pictureDisplay;
     private Button analyzePictureButton;
-    private TextView displayAnalyze;
+    private ListView displayAnalyzeList;
     private Bitmap bitmap;
-    private String textToDisplay;
+    private Adapter adapter;
     private static FaceServiceClient faceServiceClient = new FaceServiceRestClient("2563970663064fb6b943bc4e610f7127");
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,7 +57,11 @@ MainActivity extends AppCompatActivity implements View.OnClickListener {
 
     private void init() {
         pictureDisplay = (ImageView) this.findViewById(R.id.pictureDisplay);
-        displayAnalyze = (TextView) this.findViewById(R.id.descriptionDisplay);
+        displayAnalyzeList = (ListView) this.findViewById(R.id.descriptionDisplayList);
+        displayAnalyzeList.setVisibility(View.VISIBLE);
+        ArrayList<FaceAttribute> listContent = new ArrayList<>();
+        adapter = new Adapter(this,listContent);
+        displayAnalyzeList.setAdapter(adapter);
         analyzePictureButton = (Button) this.findViewById(R.id.buttonAnalyze);
         analyzePictureButton.setOnClickListener(this);
     }
@@ -85,72 +93,88 @@ MainActivity extends AppCompatActivity implements View.OnClickListener {
     }
 
     public void launchAnalyze( ) {
-        String result= launchFaceAnalyze ();
+        adapter.getContent().clear();
+        launchFaceAnalyze ();
     }
 
-    private String launchFaceAnalyze() {
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream);
-        ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-        AsyncTask<InputStream, String, Face[]> detectTask =
-                new AsyncTask<InputStream, String, Face[]>(){
-                    @Override
-                    protected Face[] doInBackground(InputStream... params) {
-                        try {
-                            publishProgress("Detecting...");
-                            Face[] result = faceServiceClient.detect(params[0],true,false,null);
-                            if (result == null)
-                            {
-                                publishProgress("Detection Finished. Nothing detected");
+    private void launchFaceAnalyze() {
+        if(bitmap != null) {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream);
+            ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
+            AsyncTask<InputStream, String, Face[]> detectTask =
+                    new AsyncTask<InputStream, String, Face[]>() {
+                        @Override
+                        protected Face[] doInBackground(InputStream... params) {
+                            try {
+                                publishProgress("Detecting...");
+                                Face[] result = faceServiceClient.detect(params[0], true, true,new FaceServiceClient.FaceAttributeType[] {
+                                        FaceServiceClient.FaceAttributeType.Age,
+                                        FaceServiceClient.FaceAttributeType.Gender,
+                                        FaceServiceClient.FaceAttributeType.Smile,
+                                        FaceServiceClient.FaceAttributeType.FacialHair,
+                                        FaceServiceClient.FaceAttributeType.HeadPose
+                                });
+                                if (result == null) {
+                                    publishProgress("Detection Finished. Nothing detected");
+                                }
+                                publishProgress(
+                                        String.format("Detection Finished. %d face(s) detected",
+                                                result.length));
+                                return result;
+                            } catch (Exception e) {
+                                publishProgress("Detection failed");
+                                e.printStackTrace();
                                 return null;
                             }
-                            publishProgress(
-                                    String.format("Detection Finished. %d face(s) detected",
-                                            result.length));
-                            return result;
-                        } catch (Exception e) {
-                            publishProgress("Detection failed");
-                            e.printStackTrace();
-                            return null;
-                        }
-                    }
-                    @Override
-                    protected void onPreExecute() {
-                        Toast.makeText(MainActivity.this, "début de l'analyse", Toast.LENGTH_SHORT).show();
-                    }
-                    @Override
-                    protected void onProgressUpdate(String... progress) {
-                        Toast.makeText(MainActivity.this, "progress", Toast.LENGTH_SHORT).show();
-                    }
-                    @Override
-                    protected void onPostExecute(Face[] result) {
-                        if (result == null){
-                            displayAnalyze.setText("error");
-                        }else{
-                            displayAnalyze.setText(result.toString());
-                            bitmap = drawFaceRectangleOnBitmap(bitmap, result);
-                            pictureDisplay.setImageBitmap(bitmap);
 
                         }
 
-                    }
+                        @Override
+                        protected void onPreExecute() {
+                            Toast.makeText(MainActivity.this, "début de l'analyse", Toast.LENGTH_SHORT).show();
+                        }
 
-                };
-        detectTask.execute(inputStream);
-        return null;
+                        @Override
+                        protected void onProgressUpdate(String... progress) {
+                            Toast.makeText(MainActivity.this, "progress", Toast.LENGTH_SHORT).show();
+                        }
+
+                        @Override
+                        protected void onPostExecute(Face[] result) {
+                            if (result == null) {
+                                Toast.makeText(MainActivity.this, "error", Toast.LENGTH_SHORT).show();
+                            } else {
+                                Toast.makeText(MainActivity.this, "debut du dessin", Toast.LENGTH_SHORT).show();
+                                bitmap = drawFaceRectangleOnBitmap(bitmap, result);
+                                pictureDisplay.setImageBitmap(bitmap);
+
+                            }
+
+                        }
+
+                    };
+            detectTask.execute(inputStream);
+        }else{
+            Toast.makeText(this, "choose a picture first", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private Bitmap drawFaceRectangleOnBitmap(Bitmap bitmap, Face[] result) {
         Bitmap bitmapDraw = bitmap.copy(Bitmap.Config.ARGB_8888, true);
         Canvas canvas = new Canvas(bitmapDraw);
-        Paint paint = new Paint();
-        paint.setAntiAlias(true);
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setColor(Color.RED);
-        int stokeWidth = 2;
-        paint.setStrokeWidth(stokeWidth);
+        Paint rectanglePaint = new Paint();
+        rectanglePaint.setAntiAlias(true);
+        rectanglePaint.setStyle(Paint.Style.STROKE);
+        rectanglePaint.setColor(Color.RED);
+        int stokeWidth = 3;
+        rectanglePaint.setStrokeWidth(stokeWidth);
+        Paint landmarkPaint = new Paint ();
+        landmarkPaint.setAntiAlias(true);
+        landmarkPaint.setStyle(Paint.Style.STROKE);
+        landmarkPaint.setColor(Color.BLUE);
+        landmarkPaint.setStrokeWidth(15);
         if (result != null) {
-            textToDisplay = new String();
             for (Face face : result) {
                 FaceRectangle faceRectangle = face.faceRectangle;
                 canvas.drawRect(
@@ -158,15 +182,14 @@ MainActivity extends AppCompatActivity implements View.OnClickListener {
                         faceRectangle.top,
                         faceRectangle.left + faceRectangle.width,
                         faceRectangle.top + faceRectangle.height,
-                        paint);
+                        rectanglePaint);
+                if(face.faceLandmarks != null){
+                    canvas.drawPoint((float) face.faceLandmarks.eyeLeftOuter.x, (float) face.faceLandmarks.eyeLeftOuter.y, landmarkPaint);
+                    canvas.drawPoint((float) face.faceLandmarks.eyeRightOuter.x, (float) face.faceLandmarks.eyeRightOuter.y, landmarkPaint);
+                }
                 if (face.faceAttributes != null) {
-                    textToDisplay += "this is a "+ face.faceAttributes.gender;
-                    textToDisplay += " this person is " + face.faceAttributes.age;
-                    textToDisplay += " facial hair : "+ face.faceAttributes.facialHair;
-                    textToDisplay += " smile : "+face.faceAttributes.smile;
-                    textToDisplay += " head pose : " + face.faceAttributes.headPose;
-
-                    displayAnalyze.setText( textToDisplay);
+                    adapter.addFaceAttribute(face.faceAttributes);
+                    adapter.notifyDataSetChanged();
                 }
 
             }
@@ -197,30 +220,26 @@ MainActivity extends AppCompatActivity implements View.OnClickListener {
 
     @Override
     protected void onActivityResult (int requestCode, int resultCode, Intent data){
-        if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK ){
-            Bundle extras = data.getExtras();
-            bitmap= (Bitmap) extras.get("data");
-            pictureDisplay.setImageBitmap(bitmap);
-        }else{
-            if(requestCode == SELECT_PHOTO && resultCode == RESULT_OK){
-                // Let's read picked image data - its URI
-                Uri pickedImage = data.getData();
-                // Let's read picked image path using content resolver
-                String[] filePath = { MediaStore.Images.Media.DATA };
-                Cursor cursor = getContentResolver().query(pickedImage, filePath, null, null, null);
-                cursor.moveToFirst();
-                String imagePath = cursor.getString(cursor.getColumnIndex(filePath[0]));
-
-                BitmapFactory.Options options = new BitmapFactory.Options();
-                options.inPreferredConfig = Bitmap.Config.ARGB_8888;
-                bitmap = BitmapFactory.decodeFile(imagePath, options);
-
-                // Do something with the bitmap
+        try {
+            if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
+                Bundle extras = data.getExtras();
+                bitmap = (Bitmap) extras.get("data");
                 pictureDisplay.setImageBitmap(bitmap);
-
-                // At the end remember to close the cursor or you will end with the RuntimeException!
-                cursor.close();
+            } else {
+                if (requestCode == SELECT_PHOTO && resultCode == RESULT_OK) {
+                    final Uri imageUri = data.getData();
+                    final InputStream imageStream = getContentResolver().openInputStream(imageUri);
+                    final Bitmap selectedImageBitmap = BitmapFactory.decodeStream(imageStream);
+                    if(selectedImageBitmap != null){
+                        this.bitmap = selectedImageBitmap;
+                        pictureDisplay.setImageBitmap(this.bitmap);
+                    }else{
+                        Toast.makeText(this, "error retrieving picture", Toast.LENGTH_SHORT).show();
+                    }
+                }
             }
+        }catch (Exception e){
+            e.printStackTrace();
         }
     }
 
