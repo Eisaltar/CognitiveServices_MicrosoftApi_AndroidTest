@@ -43,7 +43,7 @@ MainActivity extends AppCompatActivity implements View.OnClickListener {
     private ListView displayAnalyzeList;
     private Bitmap bitmap;
     private Adapter adapter;
-    private static FaceServiceClient faceServiceClient = new FaceServiceRestClient("2563970663064fb6b943bc4e610f7127");
+    private static FaceServiceClient faceServiceClient = new FaceServiceRestClient("");
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
